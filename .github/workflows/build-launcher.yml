@@ -23,7 +23,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -38,9 +38,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android platform
+      - name: Install Android build and test SDKs
         run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-35;google_apis;x86_64"
 
       - name: Set up Gradle 9.4.1
         uses: gradle/actions/setup-gradle@v4
@@ -66,6 +71,63 @@ jobs:
           cp "$APK" Relief-Launcher-0.2.0-debug.apk
           sha256sum Relief-Launcher-0.2.0-debug.apk | tee Relief-Launcher-0.2.0-debug.apk.sha256
 
+      - name: Emulator smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$PWD/Relief-Launcher-0.2.0-debug.apk"
+          echo no | avdmanager create avd \
+            --force \
+            --name relief-ci \
+            --package "system-images;android-35;google_apis;x86_64" \
+            --device pixel_6
+
+          sudo chmod 666 /dev/kvm || true
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd relief-ci \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            > emulator.log 2>&1 &
+
+          adb wait-for-device
+          booted=0
+          for _ in $(seq 1 120); do
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+              booted=1
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$booted" != "1" ]]; then
+            cat emulator.log
+            exit 1
+          fi
+
+          adb install -r "$APK"
+          adb logcat -c
+
+          adb shell am start -W -n app.relief.setup/.MainActivity | tee setup-start.txt
+          grep -q "Status: ok" setup-start.txt
+          adb shell pidof app.relief.setup >/dev/null
+
+          adb shell am start -W \
+            -a android.intent.action.MAIN \
+            -c android.intent.category.HOME \
+            -n app.relief.setup/.HomeActivity | tee home-start.txt
+          grep -q "Status: ok" home-start.txt
+          adb shell dumpsys activity activities | grep -q "app.relief.setup/.HomeActivity"
+
+          sleep 2
+          if adb logcat -d -v brief AndroidRuntime:E '*:S' | grep -q "FATAL EXCEPTION"; then
+            adb logcat -d -v brief AndroidRuntime:E '*:S'
+            exit 1
+          fi
+
+          adb exec-out screencap -p > relief-home.png
+
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
@@ -75,6 +137,9 @@ jobs:
             Relief-Launcher-0.2.0-debug.apk.sha256
             apk-badging.txt
             apk-manifest.txt
+            setup-start.txt
+            home-start.txt
+            relief-home.png
           if-no-files-found: error
 
       - name: Publish rolling test release
@@ -89,4 +154,4 @@ jobs:
             Relief-Launcher-0.2.0-debug.apk \
             Relief-Launcher-0.2.0-debug.apk.sha256 \
             --title "Relief Launcher — latest verified test build" \
-            --notes "Automatically built from main. Debug-signed test APK; use for evaluation. Stable releases will use a persistent private signing key."
+            --notes "Built from main, linted, signature/manifest-verified, and smoke-tested by installing and launching Setup and Home in an Android emulator. Debug-signed test APK; stable releases will use a persistent private signing key."
