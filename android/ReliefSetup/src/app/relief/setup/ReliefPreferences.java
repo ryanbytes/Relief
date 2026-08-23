@@ -16,6 +16,7 @@ public final class ReliefPreferences {
     private static final String KEY_LOCATION = "location_sharing";
     private static final String KEY_MESSENGERS = "messengers";
     private static final String KEY_RCS_CONFIRMED = "rcs_confirmed";
+    private static final String NO_APP = "__relief_none__";
 
     private final SharedPreferences preferences;
 
@@ -35,8 +36,10 @@ public final class ReliefPreferences {
         return preferences.getString(KEY_WEATHER, AppCatalog.WEATHER[0].packageName);
     }
 
+    /** Returns null only when the user explicitly selected no location-sharing app. */
     public String getLocationSharing() {
-        return preferences.getString(KEY_LOCATION, AppCatalog.LOCATION[0].packageName);
+        String value = preferences.getString(KEY_LOCATION, AppCatalog.LOCATION[0].packageName);
+        return NO_APP.equals(value) ? null : value;
     }
 
     public Set<String> getMessengers() {
@@ -58,7 +61,7 @@ public final class ReliefPreferences {
                 .putString(KEY_MAP, mapPackage)
                 .putString(KEY_MUSIC, musicPackage)
                 .putString(KEY_WEATHER, weatherPackage)
-                .putString(KEY_LOCATION, locationPackage)
+                .putString(KEY_LOCATION, locationPackage == null ? NO_APP : locationPackage)
                 .putStringSet(KEY_MESSENGERS, new HashSet<>(messengerPackages))
                 .putBoolean(KEY_RCS_CONFIRMED, rcsConfirmed)
                 .apply();
