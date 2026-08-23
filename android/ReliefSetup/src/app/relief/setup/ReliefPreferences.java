@@ -25,21 +25,19 @@ public final class ReliefPreferences {
     }
 
     public String getPrimaryMap() {
-        return preferences.getString(KEY_MAP, AppCatalog.MAPS[0].packageName);
+        return getOptionalSelection(KEY_MAP, AppCatalog.MAPS[0].packageName);
     }
 
     public String getPrimaryMusic() {
-        return preferences.getString(KEY_MUSIC, AppCatalog.MUSIC[0].packageName);
+        return getOptionalSelection(KEY_MUSIC, AppCatalog.MUSIC[0].packageName);
     }
 
     public String getPrimaryWeather() {
-        return preferences.getString(KEY_WEATHER, AppCatalog.WEATHER[0].packageName);
+        return getOptionalSelection(KEY_WEATHER, AppCatalog.WEATHER[0].packageName);
     }
 
-    /** Returns null only when the user explicitly selected no location-sharing app. */
     public String getLocationSharing() {
-        String value = preferences.getString(KEY_LOCATION, AppCatalog.LOCATION[0].packageName);
-        return NO_APP.equals(value) ? null : value;
+        return getOptionalSelection(KEY_LOCATION, AppCatalog.LOCATION[0].packageName);
     }
 
     public Set<String> getMessengers() {
@@ -58,12 +56,21 @@ public final class ReliefPreferences {
                      Set<String> messengerPackages,
                      boolean rcsConfirmed) {
         preferences.edit()
-                .putString(KEY_MAP, mapPackage)
-                .putString(KEY_MUSIC, musicPackage)
-                .putString(KEY_WEATHER, weatherPackage)
-                .putString(KEY_LOCATION, locationPackage == null ? NO_APP : locationPackage)
+                .putString(KEY_MAP, encodeOptionalSelection(mapPackage))
+                .putString(KEY_MUSIC, encodeOptionalSelection(musicPackage))
+                .putString(KEY_WEATHER, encodeOptionalSelection(weatherPackage))
+                .putString(KEY_LOCATION, encodeOptionalSelection(locationPackage))
                 .putStringSet(KEY_MESSENGERS, new HashSet<>(messengerPackages))
                 .putBoolean(KEY_RCS_CONFIRMED, rcsConfirmed)
                 .apply();
+    }
+
+    private String getOptionalSelection(String key, String defaultPackage) {
+        String value = preferences.getString(key, defaultPackage);
+        return NO_APP.equals(value) ? null : value;
+    }
+
+    private String encodeOptionalSelection(String packageName) {
+        return packageName == null ? NO_APP : packageName;
     }
 }
