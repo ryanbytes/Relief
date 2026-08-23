@@ -12,6 +12,7 @@ import android.provider.Settings;
 import android.provider.Telephony;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
@@ -85,6 +86,8 @@ public final class MainActivity extends Activity {
 
     private View buildUi() {
         ScrollView scroll = new ScrollView(this);
+        applySystemBarInsets(scroll);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(24), dp(24), dp(24), dp(48));
@@ -356,22 +359,36 @@ public final class MainActivity extends Activity {
         messengerChoices.add(new CheckChoice(app, box));
     }
 
+    /**
+     * Adds a mutually-exclusive category. Radio buttons are attached to their RadioGroup
+     * before the checked item is applied. Setting checked state before attachment can leave
+     * multiple children visually checked because the group has not started tracking them yet.
+     */
     private void addRadios(RadioGroup group,
                            List<RadioChoice> destination,
                            AppCatalog.AppChoice[] apps,
                            String selectedPackage) {
-        boolean selectedAny = false;
+        int selectedId = View.NO_ID;
+
         for (AppCatalog.AppChoice app : apps) {
             RadioButton button = new RadioButton(this);
+            button.setId(View.generateViewId());
             button.setText(app.name + installedSuffix(app.packageName));
             button.setTextSize(16);
-            boolean checked = packagesEqual(selectedPackage, app.packageName);
-            button.setChecked(checked);
-            selectedAny |= checked;
             group.addView(button);
             destination.add(new RadioChoice(app, button));
+
+            if (selectedId == View.NO_ID && packagesEqual(selectedPackage, app.packageName)) {
+                selectedId = button.getId();
+            }
         }
-        if (!selectedAny && !destination.isEmpty()) destination.get(0).view.setChecked(true);
+
+        if (selectedId == View.NO_ID && !destination.isEmpty()) {
+            selectedId = destination.get(0).view.getId();
+        }
+        if (selectedId != View.NO_ID) {
+            group.check(selectedId);
+        }
     }
 
     private String selectedPackage(List<RadioChoice> choices) {
@@ -428,6 +445,32 @@ public final class MainActivity extends Activity {
         params.bottomMargin = dp(4);
         button.setLayoutParams(params);
         return button;
+    }
+
+    private void applySystemBarInsets(View view) {
+        view.setOnApplyWindowInsetsListener((v, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                left = bars.left;
+                top = bars.top;
+                right = bars.right;
+                bottom = bars.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+
+            v.setPadding(left, top, right, bottom);
+            return insets;
+        });
+        view.requestApplyInsets();
     }
 
     private int dp(int value) {
