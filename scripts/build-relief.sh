@@ -22,7 +22,7 @@ case "$MODE" in
 esac
 
 mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
-"$RELIEF_ROOT/scripts/check-host.sh" "$WORKDIR"
+bash "$RELIEF_ROOT/scripts/check-host.sh" "$WORKDIR"
 
 if command -v yarn >/dev/null 2>&1; then
     YARN=yarn
@@ -69,7 +69,7 @@ echo "Generating Pixel 9a vendor files..."
 adevtool generate-all -d "$DEVICE"
 
 echo "Applying Relief changes..."
-"$RELIEF_ROOT/scripts/apply-relief.sh" "$SRC"
+bash "$RELIEF_ROOT/scripts/apply-relief.sh" "$SRC"
 
 # Re-read build environment after adding the Relief module/product fragment.
 # shellcheck disable=SC1091
