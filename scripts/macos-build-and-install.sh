@@ -14,26 +14,30 @@ if [[ "$(uname -m)" != "arm64" && "$(uname -m)" != "x86_64" ]]; then
   exit 1
 fi
 
-need_brew=0
-for cmd in gradle sdkmanager adb; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    need_brew=1
-  fi
-done
-
-if [[ "$need_brew" == 1 ]]; then
-  if ! command -v brew >/dev/null 2>&1; then
-    echo "Homebrew is required. Install it from https://brew.sh and rerun this script." >&2
-    exit 1
-  fi
-  echo "Installing Android command-line tools, platform-tools and Gradle..."
-  brew install gradle || true
-  brew install --cask android-commandlinetools || true
-  brew install --cask android-platform-tools || true
+if ! command -v brew >/dev/null 2>&1; then
+  echo "Homebrew is required. Install it from https://brew.sh and rerun this script." >&2
+  exit 1
 fi
 
+echo "Ensuring Android build tools are installed..."
+brew install openjdk@17 || true
+brew install gradle || true
+brew install --cask android-commandlinetools || true
+brew install --cask android-platform-tools || true
+
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+
 if ! command -v sdkmanager >/dev/null 2>&1; then
-  echo "sdkmanager is still not on PATH. If Android Studio is installed, add its cmdline-tools/latest/bin directory to PATH." >&2
+  echo "sdkmanager is not on PATH after installing android-commandlinetools." >&2
+  exit 1
+fi
+if ! command -v gradle >/dev/null 2>&1; then
+  echo "Gradle is not on PATH after installation." >&2
+  exit 1
+fi
+if ! command -v adb >/dev/null 2>&1; then
+  echo "ADB is not on PATH after installing android-platform-tools." >&2
   exit 1
 fi
 
@@ -48,10 +52,8 @@ sdkmanager --sdk_root="$ANDROID_HOME" \
   "build-tools;36.0.0" \
   "platform-tools"
 
-if ! command -v gradle >/dev/null 2>&1; then
-  echo "Gradle not found after setup." >&2
-  exit 1
-fi
+echo "Java: $(java -version 2>&1 | head -n 1)"
+echo "Gradle: $(gradle --version | awk '/Gradle / {print $2; exit}')"
 
 echo "Building ReliefSetup debug APK..."
 gradle --no-daemon :android:ReliefSetup:assembleDebug
@@ -65,10 +67,10 @@ fi
 echo
 printf 'APK: %s\n' "$APK"
 
-if command -v adb >/dev/null 2>&1 && adb devices | awk 'NR>1 && $2=="device" {found=1} END{exit !found}'; then
+if adb devices | awk 'NR>1 && $2=="device" {found=1} END{exit !found}'; then
   echo "Pixel detected. Installing ReliefSetup..."
   adb install -r "$APK"
-  echo "Installed. Open Relief Setup on the Pixel."
+  echo "Installed. Press Home and choose Relief as the Home app, then open Relief Setup."
 else
   echo "No authorized Android device detected."
   echo "Connect the Pixel with USB debugging enabled, authorize the Mac, then run:"
