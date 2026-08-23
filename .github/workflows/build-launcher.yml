@@ -63,20 +63,22 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/ReliefSetup/build/outputs/apk/debug/ReliefSetup-debug.apk"
+          OUTPUT="Relief-Launcher-0.2.1-debug.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | tee apk-manifest.txt
           grep -q "package: name='app.relief.setup'" apk-badging.txt
+          grep -q "versionCode='3' versionName='0.2.1'" apk-badging.txt
           grep -q "android.intent.category.HOME" apk-manifest.txt
-          cp "$APK" Relief-Launcher-0.2.0-debug.apk
-          sha256sum Relief-Launcher-0.2.0-debug.apk | tee Relief-Launcher-0.2.0-debug.apk.sha256
+          cp "$APK" "$OUTPUT"
+          sha256sum "$OUTPUT" | tee "$OUTPUT.sha256"
 
       - name: Emulator smoke test
         shell: bash
         run: |
           set -euo pipefail
-          APK="$PWD/Relief-Launcher-0.2.0-debug.apk"
+          APK="$PWD/Relief-Launcher-0.2.1-debug.apk"
           EMULATOR="$ANDROID_HOME/emulator/emulator"
           CMDLINE_BIN="$(dirname "$(command -v sdkmanager)")"
           AVDMANAGER="$CMDLINE_BIN/avdmanager"
@@ -168,8 +170,8 @@ jobs:
         with:
           name: Relief-Launcher-APK
           path: |
-            Relief-Launcher-0.2.0-debug.apk
-            Relief-Launcher-0.2.0-debug.apk.sha256
+            Relief-Launcher-0.2.1-debug.apk
+            Relief-Launcher-0.2.1-debug.apk.sha256
             apk-badging.txt
             apk-manifest.txt
             setup-start.txt
@@ -186,7 +188,7 @@ jobs:
           set -euo pipefail
           gh release delete relief-latest --cleanup-tag --yes >/dev/null 2>&1 || true
           gh release create relief-latest \
-            Relief-Launcher-0.2.0-debug.apk \
-            Relief-Launcher-0.2.0-debug.apk.sha256 \
+            Relief-Launcher-0.2.1-debug.apk \
+            Relief-Launcher-0.2.1-debug.apk.sha256 \
             --title "Relief Launcher — latest verified test build" \
-            --notes "Built from main, linted, signature/manifest-verified, and smoke-tested by installing and launching Setup and Home in an Android emulator. Debug-signed test APK; stable releases will use a persistent private signing key."
+            --notes "Relief 0.2.1. Optional Maps, Music, Weather, messaging services and location sharing can be deselected. Built from main, linted, signature/manifest-verified, and smoke-tested by installing and launching Setup and Home in an Android emulator. Debug-signed test APK; stable releases will use a persistent private signing key."
