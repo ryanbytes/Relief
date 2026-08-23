@@ -24,7 +24,8 @@ public final class AppCatalog {
             new AppChoice("Google Maps", "com.google.android.apps.maps"),
             new AppChoice("Waze", "com.waze"),
             new AppChoice("Organic Maps", "app.organicmaps"),
-            new AppChoice("HERE WeGo", "com.here.app.maps")
+            new AppChoice("HERE WeGo", "com.here.app.maps"),
+            new AppChoice("None", null)
     };
 
     public static final AppChoice[] MUSIC = {
@@ -32,13 +33,15 @@ public final class AppCatalog {
             new AppChoice("Spotify", "com.spotify.music"),
             new AppChoice("YouTube Music", "com.google.android.apps.youtube.music"),
             new AppChoice("Pandora", "com.pandora.android"),
-            new AppChoice("VLC / local music", "org.videolan.vlc")
+            new AppChoice("VLC / local music", "org.videolan.vlc"),
+            new AppChoice("None", null)
     };
 
     public static final AppChoice[] WEATHER = {
             new AppChoice("MyRadar", "com.acmeaom.android.myradar"),
             new AppChoice("Weather & Radar", "de.wetteronline.wetterapp"),
-            new AppChoice("The Weather Channel", "com.weather.Weather")
+            new AppChoice("The Weather Channel", "com.weather.Weather"),
+            new AppChoice("None", null)
     };
 
     public static final AppChoice[] LOCATION = {
