@@ -1,0 +1,23 @@
+# Never commit release signing material
+keys/
+*.pk8
+*.x509.pem
+*.pem
+*.p12
+*.jks
+avb_pkmd.bin
+id_ed25519
+id_ed25519.pub
+
+# Local Android/GrapheneOS working trees and outputs
+.work/
+out/
+releases/
+*.img
+*.zip
+*.zip.sig
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
