@@ -1,47 +1,36 @@
 # Relief
 
-Relief is a deliberately minimal Android experience for the Google Pixel 9a (`tegu`): calls, SMS/MMS/RCS, messaging services, navigation, music, severe-weather alerts, and location sharing.
+Relief is a deliberately minimal Android launcher for people who want a phone to behave like a phone: calls, SMS/MMS/RCS, messaging services, navigation, music, severe-weather alerts, and location sharing.
 
-## Recommended V1: Mac + official GrapheneOS
+The launcher is vendor-neutral. It is designed to run on Android 6.0+ (`minSdk 23`) on Pixels, Samsung, Motorola, OnePlus and other Android devices without replacing the operating system.
 
-You do **not** need a Linux workstation for the practical Relief deployment.
+## What Relief does
 
-Use official GrapheneOS on the Pixel 9a as the signed, updateable base OS, then install the standalone `ReliefSetup` APK from a Mac. Relief provides:
+Relief provides:
 
+- a minimal HOME screen with Phone, Messages, Maps, Music, Weather and Apps
 - required Google Messages / RCS setup checks
 - selectable messaging, navigation, music, weather and location-sharing apps
-- a minimal HOME launcher exposing Phone, Messages, Maps, Music, Weather, Setup and Settings
+- persistent primary-app choices rather than guessing which installed app to launch
+- a small selected-apps screen instead of a conventional all-apps drawer
+- direct access to Android Settings when needed
 
-See [`docs/MAC.md`](docs/MAC.md).
+Relief does **not** disable Android security, telephony, emergency alerts, Bluetooth, location services, verified boot, or normal OS updates.
 
-On an Apple Silicon Mac:
+## RCS
 
-```bash
-git clone https://github.com/ryanbytes/Relief.git
-cd Relief
-chmod +x scripts/macos-build-and-install.sh
-./scripts/macos-build-and-install.sh
-```
+Relief treats RCS as required and uses Google Messages as the RCS client.
 
-The standalone APK uses public Android APIs and can be built normally on macOS. The script installs/uses Android SDK API 37, Build Tools 36.0.0, Gradle and ADB, then builds and installs the APK when an authorized Pixel is attached.
+The setup flow checks that:
 
-Expected output:
-
-```text
-android/ReliefSetup/build/outputs/apk/debug/ReliefSetup-debug.apk
-```
-
-## RCS is mandatory
-
-Relief treats RCS as required. The setup flow checks that:
-
-- sandboxed Google Play is installed
+- Google Play services is installed
 - Google Messages is installed
 - Google Messages is the default SMS app
-- Play services has Phone permission
 - the user has explicitly verified Google Messages reports RCS **Connected**
 
-Some carriers also require the GrapheneOS ICC-authentication permission for Play services. Google does not expose a public API for third-party apps to read Google Messages' actual RCS registration state, so Relief does not fabricate that status.
+On GrapheneOS, Relief additionally detects the GrapheneOS Apps environment and checks the Play services Phone permission needed by the sandboxed-Google RCS path.
+
+Actual RCS registration depends on Google Messages, the carrier and the device. Android does not expose a public API that lets Relief reliably read Google Messages' RCS registration state, so Relief deliberately requires the user to confirm the Connected state instead of inventing one.
 
 ## Selectable apps
 
@@ -51,39 +40,37 @@ Some carriers also require the GrapheneOS ICC-authentication permission for Play
 - Weather: MyRadar, Weather & Radar, The Weather Channel
 - Location sharing: Google Maps, OwnTracks, or none
 
-## What Relief does not remove
+## Downloadable build
 
-The GrapheneOS base retains the infrastructure that should not be stripped merely to save a small amount of space:
+The repository's `Build Relief Launcher` workflow lints, compiles, verifies the APK signature, verifies the package name and HOME intent, then publishes a rolling test build as `relief-latest` when `main` passes.
 
-- cellular modem / IMS / VoLTE / VoWiFi
-- Cell Broadcast / emergency alerts
-- Bluetooth and Wi-Fi framework support
-- GNSS and network-location plumbing
-- PackageInstaller / permission controller
-- WebView
-- sandboxed Google Play compatibility layer
-- Android Verified Boot
+The rolling APK is intentionally debug-signed for evaluation. A stable public release should use a persistent private signing key stored outside the repository.
 
-## Full custom ROM path
+## Build on a Mac
 
-The repository also contains the experimental full-ROM path pinned to GrapheneOS `2026081300` (Android 17):
-
-- device: Pixel 9a
-- codename: `tegu`
-- build target: `tegu-cur-user`
-
-A complete GrapheneOS-derived build requires an x86-64 Linux host with at least 32 GiB RAM and roughly 200+ GiB of working storage. GitHub Actions is intentionally not used.
-
-On a suitable Linux builder:
+On Apple Silicon or Intel macOS:
 
 ```bash
-sudo ./scripts/install-build-deps-debian.sh
-./scripts/check-host.sh
-./scripts/build-relief.sh
+git clone https://github.com/ryanbytes/Relief.git
+cd Relief
+chmod +x scripts/macos-build-and-install.sh
+./scripts/macos-build-and-install.sh
 ```
 
-For a signed, bootloader-lockable production release, generate and protect unique signing keys first and follow `docs/BUILD.md`. Never commit private signing keys.
+The script installs/uses Java 17, Gradle, Android SDK API 36, Build Tools 36.0.0 and ADB. It runs Android lint, builds the APK, verifies its signature and HOME intent, then installs it if an authorized Android phone is connected.
+
+Expected output:
+
+```text
+android/ReliefSetup/build/outputs/apk/debug/ReliefSetup-debug.apk
+```
+
+After installation, press Home and select **Relief** as the Home app.
+
+## Experimental full-ROM work
+
+Older experimental files for a GrapheneOS-derived Pixel 9a build remain in the repository for reference. They are not the recommended product direction. The launcher approach is smaller, safer, works across Android vendors, preserves OEM/GrapheneOS updates, and can be built on a Mac.
 
 ## License
 
-Relief-specific code is MIT licensed. GrapheneOS/AOSP components retain their upstream licenses.
+Relief-specific code is MIT licensed. Third-party apps and Android components retain their own licenses.
