@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.provider.Telephony;
@@ -21,19 +22,21 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+/** First-run and reconfiguration screen for the Relief launcher. */
 public final class MainActivity extends Activity {
-    private static final String GRAPHENE_APPS = "app.grapheneos.apps";
-    private static final String PLAY_STORE = "com.android.vending";
-    private static final String PLAY_SERVICES = "com.google.android.gms";
-    private static final String GOOGLE_MESSAGES = "com.google.android.apps.messaging";
-
-    private final List<CheckChoice> optionalChecks = new ArrayList<>();
+    private final List<CheckChoice> messengerChoices = new ArrayList<>();
     private final List<RadioChoice> mapChoices = new ArrayList<>();
+    private final List<RadioChoice> musicChoices = new ArrayList<>();
     private final List<RadioChoice> weatherChoices = new ArrayList<>();
     private final List<RadioChoice> locationChoices = new ArrayList<>();
+    private final ArrayList<AppCatalog.AppChoice> installQueue = new ArrayList<>();
 
+    private ReliefPreferences preferences;
+    private TextView platformStatus;
     private TextView playStatus;
     private TextView messagesStatus;
     private TextView smsStatus;
@@ -42,34 +45,23 @@ public final class MainActivity extends Activity {
     private Button finishButton;
     private TextView installQueueStatus;
     private Button installNextButton;
-    private final ArrayList<AppChoice> installQueue = new ArrayList<>();
-    private int queueIndex = 0;
-
-    private static final class AppChoice {
-        final String name;
-        final String packageName;
-
-        AppChoice(String name, String packageName) {
-            this.name = name;
-            this.packageName = packageName;
-        }
-    }
+    private int queueIndex;
 
     private static final class CheckChoice {
-        final AppChoice app;
+        final AppCatalog.AppChoice app;
         final CheckBox view;
 
-        CheckChoice(AppChoice app, CheckBox view) {
+        CheckChoice(AppCatalog.AppChoice app, CheckBox view) {
             this.app = app;
             this.view = view;
         }
     }
 
     private static final class RadioChoice {
-        final AppChoice app;
+        final AppCatalog.AppChoice app;
         final RadioButton view;
 
-        RadioChoice(AppChoice app, RadioButton view) {
+        RadioChoice(AppCatalog.AppChoice app, RadioButton view) {
             this.app = app;
             this.view = view;
         }
@@ -78,6 +70,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        preferences = new ReliefPreferences(this);
         setTitle("Relief Setup");
         setContentView(buildUi());
         refreshRequiredStatus();
@@ -99,21 +92,21 @@ public final class MainActivity extends Activity {
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
 
-        TextView title = text("Relief", 30, true);
-        root.addView(title);
-        root.addView(text("Set up only the communication, navigation, music, weather and location-sharing apps you want.", 16, false));
+        root.addView(text("Relief", 30, true));
+        root.addView(text("A minimal launcher for calls, RCS/SMS, messaging, navigation, music, weather alerts and location sharing.", 16, false));
 
         section(root, "RCS — required");
-        root.addView(text("Relief requires Google Messages RCS. GrapheneOS supports it through sandboxed Google Play in the Owner profile. Some carriers also require Play services ICC authentication.", 15, false));
+        platformStatus = statusRow(root, "Android environment");
+        root.addView(text("Relief uses Google Messages for RCS. Actual RCS registration is controlled by Google Messages, the carrier and the device; Android does not expose a public API for Relief to read that registration state.", 14, false));
 
-        playStatus = statusRow(root, "Sandboxed Google Play");
+        playStatus = statusRow(root, "Google Play services");
         Button grapheneApps = button("Open GrapheneOS Apps");
-        grapheneApps.setOnClickListener(v -> launchPackage(GRAPHENE_APPS));
+        grapheneApps.setOnClickListener(v -> launchGrapheneApps());
         root.addView(grapheneApps);
 
         messagesStatus = statusRow(root, "Google Messages");
         Button installMessages = button("Install / open Google Messages");
-        installMessages.setOnClickListener(v -> openStore(GOOGLE_MESSAGES));
+        installMessages.setOnClickListener(v -> installOrLaunch(AppCatalog.GOOGLE_MESSAGES));
         root.addView(installMessages);
 
         smsStatus = statusRow(root, "Default SMS app");
@@ -121,64 +114,62 @@ public final class MainActivity extends Activity {
         makeDefault.setOnClickListener(v -> requestSmsRole());
         root.addView(makeDefault);
 
-        phonePermissionStatus = statusRow(root, "Play services Phone permission");
+        phonePermissionStatus = statusRow(root, "GrapheneOS Play services Phone permission");
         Button playPermissions = button("Open Play services permissions");
-        playPermissions.setOnClickListener(v -> openAppDetails(PLAY_SERVICES));
+        playPermissions.setOnClickListener(v -> AppUtils.openAppDetails(this, AppCatalog.PLAY_SERVICES));
         root.addView(playPermissions);
 
-        root.addView(text("Carrier verification: Settings → Apps → Sandboxed Google Play → Play services special permissions → allow ICC authentication if your carrier requires it.", 14, false));
-
         Button openMessages = button("Open Messages and verify RCS");
-        openMessages.setOnClickListener(v -> launchPackage(GOOGLE_MESSAGES));
+        openMessages.setOnClickListener(v -> {
+            if (!AppUtils.launch(this, AppCatalog.GOOGLE_MESSAGES)) {
+                AppUtils.openStore(this, AppCatalog.GOOGLE_MESSAGES);
+            }
+        });
         root.addView(openMessages);
 
         rcsConfirmed = new CheckBox(this);
-        rcsConfirmed.setText("I confirmed Messages → Settings → RCS chats shows Connected");
+        rcsConfirmed.setText("I confirmed Google Messages → Settings → RCS chats shows Connected");
         rcsConfirmed.setTextSize(16);
+        rcsConfirmed.setChecked(preferences.isRcsConfirmed());
         rcsConfirmed.setOnCheckedChangeListener((buttonView, isChecked) -> refreshRequiredStatus());
         root.addView(rcsConfirmed);
 
         section(root, "Messaging");
-        addCheck(root, "Signal", "org.thoughtcrime.securesms");
-        addCheck(root, "WhatsApp", "com.whatsapp");
-        addCheck(root, "Telegram", "org.telegram.messenger");
-        addCheck(root, "Messenger", "com.facebook.orca");
+        Set<String> selectedMessengers = preferences.getMessengers();
+        for (AppCatalog.AppChoice app : AppCatalog.MESSENGERS) {
+            addCheck(root, app, selectedMessengers.contains(app.packageName));
+        }
 
         section(root, "Navigation");
         RadioGroup maps = new RadioGroup(this);
         maps.setOrientation(RadioGroup.VERTICAL);
-        addRadio(maps, mapChoices, "Google Maps", "com.google.android.apps.maps", true);
-        addRadio(maps, mapChoices, "Waze", "com.waze", false);
-        addRadio(maps, mapChoices, "Organic Maps", "app.organicmaps", false);
-        addRadio(maps, mapChoices, "HERE WeGo", "com.here.app.maps", false);
+        addRadios(maps, mapChoices, AppCatalog.MAPS, preferences.getPrimaryMap());
         root.addView(maps);
 
         section(root, "Music");
-        addCheck(root, "Amazon Music", "com.amazon.mp3");
-        addCheck(root, "Spotify", "com.spotify.music");
-        addCheck(root, "YouTube Music", "com.google.android.apps.youtube.music");
-        addCheck(root, "Pandora", "com.pandora.android");
-        addCheck(root, "VLC / local music", "org.videolan.vlc");
+        RadioGroup music = new RadioGroup(this);
+        music.setOrientation(RadioGroup.VERTICAL);
+        addRadios(music, musicChoices, AppCatalog.MUSIC, preferences.getPrimaryMusic());
+        root.addView(music);
 
         section(root, "Weather alerts");
         RadioGroup weather = new RadioGroup(this);
         weather.setOrientation(RadioGroup.VERTICAL);
-        addRadio(weather, weatherChoices, "MyRadar", "com.acmeaom.android.myradar", true);
-        addRadio(weather, weatherChoices, "Weather & Radar", "de.wetteronline.wetterapp", false);
-        addRadio(weather, weatherChoices, "The Weather Channel", "com.weather.Weather", false);
+        addRadios(weather, weatherChoices, AppCatalog.WEATHER, preferences.getPrimaryWeather());
         root.addView(weather);
 
         section(root, "Location sharing");
         RadioGroup location = new RadioGroup(this);
         location.setOrientation(RadioGroup.VERTICAL);
-        addRadio(location, locationChoices, "Google Maps", "com.google.android.apps.maps", true);
-        addRadio(location, locationChoices, "OwnTracks", "org.owntracks.android", false);
-        addRadio(location, locationChoices, "None", null, false);
+        addRadios(location, locationChoices, AppCatalog.LOCATION, preferences.getLocationSharing());
         root.addView(location);
 
         section(root, "Install selected apps");
-        Button prepare = button("Prepare install queue");
-        prepare.setOnClickListener(v -> prepareInstallQueue());
+        Button prepare = button("Save choices and prepare install queue");
+        prepare.setOnClickListener(v -> {
+            saveSelections();
+            prepareInstallQueue();
+        });
         root.addView(prepare);
 
         installQueueStatus = text("No install queue prepared.", 14, false);
@@ -188,12 +179,24 @@ public final class MainActivity extends Activity {
         installNextButton.setOnClickListener(v -> installNext());
         root.addView(installNextButton);
 
+        section(root, "Launcher");
+        Button homeSettings = button("Set Relief as default Home app");
+        homeSettings.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
+            } catch (Exception e) {
+                Toast.makeText(this, "Open Android Settings → Apps → Default apps → Home app.", Toast.LENGTH_LONG).show();
+            }
+        });
+        root.addView(homeSettings);
+
         section(root, "Finish");
-        root.addView(text("The Finish button stays locked until sandboxed Google Play and Google Messages are present, Google Messages is the default SMS app, Play services has Phone permission, and you manually confirm RCS is Connected.", 14, false));
+        root.addView(text("Finish stays locked until Google Messages and Play services are present, Google Messages is the default SMS app, and you confirm RCS is Connected. GrapheneOS additionally requires Play services Phone permission.", 14, false));
         finishButton = button("Finish Relief setup");
         finishButton.setEnabled(false);
         finishButton.setOnClickListener(v -> {
-            Toast.makeText(this, "Relief setup complete", Toast.LENGTH_LONG).show();
+            saveSelections();
+            startActivity(new Intent(this, HomeActivity.class));
             finish();
         });
         root.addView(finishButton);
@@ -201,55 +204,69 @@ public final class MainActivity extends Activity {
         return scroll;
     }
 
+    private void saveSelections() {
+        Set<String> messengers = new HashSet<>();
+        for (CheckChoice choice : messengerChoices) {
+            if (choice.view.isChecked()) messengers.add(choice.app.packageName);
+        }
+        preferences.save(
+                selectedPackage(mapChoices),
+                selectedPackage(musicChoices),
+                selectedPackage(weatherChoices),
+                selectedPackage(locationChoices),
+                messengers,
+                rcsConfirmed.isChecked());
+    }
+
     private void prepareInstallQueue() {
         installQueue.clear();
         queueIndex = 0;
 
-        addIfMissing(new AppChoice("Google Messages", GOOGLE_MESSAGES));
-        for (CheckChoice c : optionalChecks) {
-            if (c.view.isChecked()) addIfMissing(c.app);
+        addIfMissing(new AppCatalog.AppChoice("Google Messages", AppCatalog.GOOGLE_MESSAGES));
+        for (CheckChoice choice : messengerChoices) {
+            if (choice.view.isChecked()) addIfMissing(choice.app);
         }
         addSelectedRadio(mapChoices);
+        addSelectedRadio(musicChoices);
         addSelectedRadio(weatherChoices);
         addSelectedRadio(locationChoices);
-
-        while (queueIndex < installQueue.size() && isInstalled(installQueue.get(queueIndex).packageName)) {
-            queueIndex++;
-        }
         refreshInstallQueue();
     }
 
     private void addSelectedRadio(List<RadioChoice> choices) {
-        for (RadioChoice c : choices) {
-            if (c.view.isChecked() && c.app.packageName != null) {
-                addIfMissing(c.app);
+        for (RadioChoice choice : choices) {
+            if (choice.view.isChecked() && choice.app.packageName != null) {
+                addIfMissing(choice.app);
                 return;
             }
         }
     }
 
-    private void addIfMissing(AppChoice app) {
-        if (app.packageName == null || isInstalled(app.packageName)) return;
-        for (AppChoice existing : installQueue) {
+    private void addIfMissing(AppCatalog.AppChoice app) {
+        if (app.packageName == null || AppUtils.isInstalled(this, app.packageName)) return;
+        for (AppCatalog.AppChoice existing : installQueue) {
             if (app.packageName.equals(existing.packageName)) return;
         }
         installQueue.add(app);
     }
 
     private void installNext() {
-        if (!isInstalled(PLAY_STORE)) {
-            Toast.makeText(this, "Install sandboxed Google Play from GrapheneOS Apps first.", Toast.LENGTH_LONG).show();
-            launchPackage(GRAPHENE_APPS);
+        while (queueIndex < installQueue.size()
+                && AppUtils.isInstalled(this, installQueue.get(queueIndex).packageName)) {
+            queueIndex++;
+        }
+        if (queueIndex >= installQueue.size()) {
+            refreshInstallQueue();
             return;
         }
-        if (queueIndex >= installQueue.size()) return;
-        AppChoice app = installQueue.get(queueIndex);
-        openStore(app.packageName);
+        AppCatalog.AppChoice app = installQueue.get(queueIndex);
+        AppUtils.openStore(this, app.packageName);
     }
 
     private void refreshInstallQueue() {
-        if (installQueueStatus == null) return;
-        while (queueIndex < installQueue.size() && isInstalled(installQueue.get(queueIndex).packageName)) {
+        if (installQueueStatus == null || installNextButton == null) return;
+        while (queueIndex < installQueue.size()
+                && AppUtils.isInstalled(this, installQueue.get(queueIndex).packageName)) {
             queueIndex++;
         }
         if (installQueue.isEmpty()) {
@@ -259,8 +276,8 @@ public final class MainActivity extends Activity {
             installQueueStatus.setText("Selected apps are installed.");
             installNextButton.setEnabled(false);
         } else {
-            AppChoice next = installQueue.get(queueIndex);
-            installQueueStatus.setText("Next: " + next.name + "  (" + (queueIndex + 1) + "/" + installQueue.size() + ")");
+            AppCatalog.AppChoice next = installQueue.get(queueIndex);
+            installQueueStatus.setText("Next: " + next.name + " (" + (queueIndex + 1) + "/" + installQueue.size() + ")");
             installNextButton.setText("Install " + next.name);
             installNextButton.setEnabled(true);
         }
@@ -268,19 +285,29 @@ public final class MainActivity extends Activity {
 
     private void refreshRequiredStatus() {
         if (playStatus == null) return;
-        boolean playStore = isInstalled(PLAY_STORE);
-        boolean playServices = isInstalled(PLAY_SERVICES);
-        boolean messages = isInstalled(GOOGLE_MESSAGES);
-        boolean defaultSms = GOOGLE_MESSAGES.equals(Telephony.Sms.getDefaultSmsPackage(this));
-        boolean phonePermission = getPackageManager().checkPermission(
-                "android.permission.READ_PHONE_STATE", PLAY_SERVICES) == PackageManager.PERMISSION_GRANTED;
 
-        playStatus.setText(status(playStore && playServices) + " Sandboxed Google Play");
+        boolean graphene = AppUtils.isInstalled(this, AppCatalog.GRAPHENE_APPS);
+        boolean playServices = AppUtils.isInstalled(this, AppCatalog.PLAY_SERVICES);
+        boolean messages = AppUtils.isInstalled(this, AppCatalog.GOOGLE_MESSAGES);
+        boolean defaultSms = AppCatalog.GOOGLE_MESSAGES.equals(Telephony.Sms.getDefaultSmsPackage(this));
+        boolean phonePermission = playServices && getPackageManager().checkPermission(
+                "android.permission.READ_PHONE_STATE", AppCatalog.PLAY_SERVICES) == PackageManager.PERMISSION_GRANTED;
+
+        platformStatus.setText("✓ " + (graphene ? "GrapheneOS-compatible environment detected" : "Standard Android environment"));
+        playStatus.setText(status(playServices) + " Google Play services");
         messagesStatus.setText(status(messages) + " Google Messages");
         smsStatus.setText(status(defaultSms) + " Google Messages is default SMS");
-        phonePermissionStatus.setText(status(phonePermission) + " Play services Phone permission");
 
-        finishButton.setEnabled(playStore && playServices && messages && defaultSms && phonePermission && rcsConfirmed.isChecked());
+        if (graphene) {
+            phonePermissionStatus.setVisibility(View.VISIBLE);
+            phonePermissionStatus.setText(status(phonePermission) + " Play services Phone permission");
+        } else {
+            phonePermissionStatus.setVisibility(View.GONE);
+        }
+
+        boolean required = playServices && messages && defaultSms && rcsConfirmed.isChecked();
+        if (graphene) required = required && phonePermission;
+        finishButton.setEnabled(required);
     }
 
     private String status(boolean ok) {
@@ -288,116 +315,119 @@ public final class MainActivity extends Activity {
     }
 
     private void requestSmsRole() {
-        if (!isInstalled(GOOGLE_MESSAGES)) {
+        if (!AppUtils.isInstalled(this, AppCatalog.GOOGLE_MESSAGES)) {
             Toast.makeText(this, "Install Google Messages first.", Toast.LENGTH_LONG).show();
             return;
         }
-        RoleManager rm = getSystemService(RoleManager.class);
-        if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
-            startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_SMS), 10);
-        } else {
-            Toast.makeText(this, "SMS role is not available.", Toast.LENGTH_LONG).show();
-        }
-    }
 
-    private void openStore(String packageName) {
-        Intent market = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + packageName));
-        market.setPackage(PLAY_STORE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            RoleManager roleManager = getSystemService(RoleManager.class);
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
+                startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS));
+                return;
+            }
+        }
+
+        Intent legacy = new Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT);
+        legacy.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, AppCatalog.GOOGLE_MESSAGES);
         try {
-            startActivity(market);
+            startActivity(legacy);
         } catch (Exception e) {
-            Intent web = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("https://play.google.com/store/apps/details?id=" + packageName));
-            startActivity(web);
+            Toast.makeText(this, "Open Android Settings → Apps → Default apps → SMS app.", Toast.LENGTH_LONG).show();
         }
     }
 
-    private void openAppDetails(String packageName) {
-        if (!isInstalled(packageName)) {
-            Toast.makeText(this, "Package is not installed yet.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + packageName));
-        startActivity(i);
+    private void installOrLaunch(String packageName) {
+        if (!AppUtils.launch(this, packageName)) AppUtils.openStore(this, packageName);
     }
 
-    private void launchPackage(String packageName) {
-        Intent i = getPackageManager().getLaunchIntentForPackage(packageName);
-        if (i == null) {
-            Toast.makeText(this, packageName + " is not installed.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(i);
-    }
-
-    private boolean isInstalled(String packageName) {
-        if (packageName == null) return false;
-        try {
-            getPackageManager().getPackageInfo(packageName, 0);
-            return true;
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
+    private void launchGrapheneApps() {
+        if (!AppUtils.launch(this, AppCatalog.GRAPHENE_APPS)) {
+            Toast.makeText(this, "GrapheneOS Apps is only present on GrapheneOS. On standard Android, install Google Messages from your app store.", Toast.LENGTH_LONG).show();
         }
     }
 
-    private void addCheck(LinearLayout root, String name, String packageName) {
+    private void addCheck(LinearLayout root, AppCatalog.AppChoice app, boolean checked) {
         CheckBox box = new CheckBox(this);
-        box.setText(name + (isInstalled(packageName) ? "  ✓ installed" : ""));
+        box.setText(app.name + installedSuffix(app.packageName));
         box.setTextSize(16);
+        box.setChecked(checked);
         root.addView(box);
-        optionalChecks.add(new CheckChoice(new AppChoice(name, packageName), box));
+        messengerChoices.add(new CheckChoice(app, box));
     }
 
-    private void addRadio(RadioGroup group, List<RadioChoice> choices,
-                          String name, String packageName, boolean checked) {
-        RadioButton button = new RadioButton(this);
-        button.setText(name + (packageName != null && isInstalled(packageName) ? "  ✓ installed" : ""));
-        button.setTextSize(16);
-        button.setChecked(checked);
-        group.addView(button);
-        choices.add(new RadioChoice(new AppChoice(name, packageName), button));
+    private void addRadios(RadioGroup group,
+                           List<RadioChoice> destination,
+                           AppCatalog.AppChoice[] apps,
+                           String selectedPackage) {
+        boolean selectedAny = false;
+        for (AppCatalog.AppChoice app : apps) {
+            RadioButton button = new RadioButton(this);
+            button.setText(app.name + installedSuffix(app.packageName));
+            button.setTextSize(16);
+            boolean checked = packagesEqual(selectedPackage, app.packageName);
+            button.setChecked(checked);
+            selectedAny |= checked;
+            group.addView(button);
+            destination.add(new RadioChoice(app, button));
+        }
+        if (!selectedAny && !destination.isEmpty()) destination.get(0).view.setChecked(true);
+    }
+
+    private String selectedPackage(List<RadioChoice> choices) {
+        for (RadioChoice choice : choices) {
+            if (choice.view.isChecked()) return choice.app.packageName;
+        }
+        return null;
+    }
+
+    private boolean packagesEqual(String a, String b) {
+        if (a == null) return b == null;
+        return a.equals(b);
+    }
+
+    private String installedSuffix(String packageName) {
+        return packageName != null && AppUtils.isInstalled(this, packageName) ? "  ✓ installed" : "";
     }
 
     private TextView statusRow(LinearLayout root, String label) {
-        TextView v = text("… " + label, 16, true);
-        root.addView(v);
-        return v;
+        TextView view = text("… " + label, 16, true);
+        root.addView(view);
+        return view;
     }
 
     private void section(LinearLayout root, String label) {
-        TextView v = text(label, 20, true);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+        TextView view = text(label, 20, true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        p.topMargin = dp(28);
-        p.bottomMargin = dp(8);
-        v.setLayoutParams(p);
-        root.addView(v);
+        params.topMargin = dp(28);
+        params.bottomMargin = dp(8);
+        view.setLayoutParams(params);
+        root.addView(view);
     }
 
     private TextView text(String value, int sp, boolean bold) {
-        TextView v = new TextView(this);
-        v.setText(value);
-        v.setTextSize(sp);
-        v.setLineSpacing(0, 1.12f);
-        if (bold) v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        return v;
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(sp);
+        view.setLineSpacing(0, 1.12f);
+        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        return view;
     }
 
     private Button button(String label) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        p.topMargin = dp(6);
-        p.bottomMargin = dp(4);
-        b.setLayoutParams(p);
-        return b;
+        params.topMargin = dp(6);
+        params.bottomMargin = dp(4);
+        button.setLayoutParams(params);
+        return button;
     }
 
     private int dp(int value) {
