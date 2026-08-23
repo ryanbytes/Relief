@@ -1,0 +1,15 @@
+android_app {
+    name: "ReliefSetup",
+    manifest: "AndroidManifest.xml",
+    srcs: ["src/**/*.java"],
+    resource_dirs: ["res"],
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+    optimize: {
+        enabled: true,
+    },
+    dex_preopt: {
+        enabled: true,
+    },
+}
