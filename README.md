@@ -1,66 +1,88 @@
 # Relief
 
-Relief is a minimal Android build for the Google Pixel 9a (`tegu`) based on GrapheneOS. Its purpose is deliberately narrow: calls, SMS/MMS/RCS, messaging services, navigation, music, severe-weather alerts, and location sharing.
+Relief is a deliberately minimal Android experience for the Google Pixel 9a (`tegu`): calls, SMS/MMS/RCS, messaging services, navigation, music, severe-weather alerts, and location sharing.
 
-## Status
+## Recommended V1: Mac + official GrapheneOS
 
-Early buildable source tree. The project pins GrapheneOS `2026081300` (Android 17) for the first reproducible build.
+You do **not** need a Linux workstation for the practical Relief deployment.
 
-Relief does **not** weaken the modem, IMS, emergency-alert, location, WebView, permission, verified-boot, or sandboxed-Google compatibility infrastructure. It removes only application-layer components that are safe to omit, and adds `ReliefSetup` for first-boot app selection.
+Use official GrapheneOS on the Pixel 9a as the signed, updateable base OS, then install the standalone `ReliefSetup` APK from a Mac. Relief provides:
 
-## Pixel 9a
+- required Google Messages / RCS setup checks
+- selectable messaging, navigation, music, weather and location-sharing apps
+- a minimal HOME launcher exposing Phone, Messages, Maps, Music, Weather, Setup and Settings
 
-- Device: Pixel 9a
-- Codename: `tegu`
-- Build target: `tegu-cur-user`
-- Base: GrapheneOS Android 17
-- Initial base tag: `2026081300`
-- RCS path: Google Messages + GrapheneOS sandboxed Google Play compatibility layer
+See [`docs/MAC.md`](docs/MAC.md).
 
-## First boot
-
-ReliefSetup treats Google Messages/RCS as required and presents optional selections for:
-
-- Messaging: Signal, WhatsApp, Telegram, Messenger
-- Navigation: Google Maps, Waze, Organic Maps, HERE WeGo
-- Music: Amazon Music, Spotify, YouTube Music, Pandora, VLC
-- Weather: Breezy Weather, MyRadar, The Weather Channel
-- Location sharing: Google Maps, OwnTracks, or none
-
-The setup app can verify that Google Messages is installed and is the default SMS handler. Google does not expose a public Android API for third-party apps to read Google Messages' actual RCS registration state, so ReliefSetup does not fabricate an RCS `Connected` result; it opens Messages so the user can confirm RCS registration.
-
-## Building
-
-A complete GrapheneOS build currently requires an x86-64 Linux host with at least 32 GiB RAM and roughly 200+ GiB of working storage. GitHub Actions is intentionally not used.
-
-On a suitable Debian/Ubuntu Linux builder:
+On an Apple Silicon Mac:
 
 ```bash
 git clone https://github.com/ryanbytes/Relief.git
 cd Relief
-sudo ./scripts/install-build-deps-debian.sh
-./scripts/check-host.sh
-./scripts/build-relief.sh
+chmod +x scripts/macos-build-and-install.sh
+./scripts/macos-build-and-install.sh
 ```
 
-`build-relief.sh` syncs the pinned GrapheneOS source, generates Pixel vendor files, injects ReliefSetup and the Relief product fragment, then builds `tegu-cur-user`.
+The standalone APK uses public Android APIs and can be built normally on macOS. The script installs/uses Android SDK API 37, Build Tools 36.0.0, Gradle and ADB, then builds and installs the APK when an authorized Pixel is attached.
 
-For a signed, bootloader-lockable production release, generate and protect unique signing keys first and run the release step described in `docs/BUILD.md`. Never ship or commit private signing keys.
+Expected output:
 
-## Safety rules
+```text
+android/ReliefSetup/build/outputs/apk/debug/ReliefSetup-debug.apk
+```
 
-Relief deliberately keeps:
+## RCS is mandatory
 
-- cellular modem / IMS / VoLTE / VoWiFi support
+Relief treats RCS as required. The setup flow checks that:
+
+- sandboxed Google Play is installed
+- Google Messages is installed
+- Google Messages is the default SMS app
+- Play services has Phone permission
+- the user has explicitly verified Google Messages reports RCS **Connected**
+
+Some carriers also require the GrapheneOS ICC-authentication permission for Play services. Google does not expose a public API for third-party apps to read Google Messages' actual RCS registration state, so Relief does not fabricate that status.
+
+## Selectable apps
+
+- Messaging: Signal, WhatsApp, Telegram, Messenger
+- Navigation: Google Maps, Waze, Organic Maps, HERE WeGo
+- Music: Amazon Music, Spotify, YouTube Music, Pandora, VLC
+- Weather: MyRadar, Weather & Radar, The Weather Channel
+- Location sharing: Google Maps, OwnTracks, or none
+
+## What Relief does not remove
+
+The GrapheneOS base retains the infrastructure that should not be stripped merely to save a small amount of space:
+
+- cellular modem / IMS / VoLTE / VoWiFi
 - Cell Broadcast / emergency alerts
 - Bluetooth and Wi-Fi framework support
 - GNSS and network-location plumbing
 - PackageInstaller / permission controller
 - WebView
-- GrapheneOS sandboxed Google Play compatibility layer
-- Android Verified Boot support
+- sandboxed Google Play compatibility layer
+- Android Verified Boot
 
-Stripping these saves little and creates failure modes in calling, emergency alerts, RCS, maps, Bluetooth audio, file pickers, or app compatibility.
+## Full custom ROM path
+
+The repository also contains the experimental full-ROM path pinned to GrapheneOS `2026081300` (Android 17):
+
+- device: Pixel 9a
+- codename: `tegu`
+- build target: `tegu-cur-user`
+
+A complete GrapheneOS-derived build requires an x86-64 Linux host with at least 32 GiB RAM and roughly 200+ GiB of working storage. GitHub Actions is intentionally not used.
+
+On a suitable Linux builder:
+
+```bash
+sudo ./scripts/install-build-deps-debian.sh
+./scripts/check-host.sh
+./scripts/build-relief.sh
+```
+
+For a signed, bootloader-lockable production release, generate and protect unique signing keys first and follow `docs/BUILD.md`. Never commit private signing keys.
 
 ## License
 
