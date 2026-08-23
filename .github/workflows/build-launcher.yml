@@ -8,6 +8,13 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - ".github/workflows/build-launcher.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "android/ReliefSetup/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/build-launcher.yml"
   workflow_dispatch:
 
 permissions:
@@ -71,6 +78,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish rolling test release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
