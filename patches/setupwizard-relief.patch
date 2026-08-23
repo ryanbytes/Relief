@@ -1,0 +1,25 @@
+diff --git a/java/app/grapheneos/setupwizard/view/activity/FinishActivity.kt b/java/app/grapheneos/setupwizard/view/activity/FinishActivity.kt
+--- a/java/app/grapheneos/setupwizard/view/activity/FinishActivity.kt
++++ b/java/app/grapheneos/setupwizard/view/activity/FinishActivity.kt
+@@ -1,5 +1,6 @@
+ package app.grapheneos.setupwizard.view.activity
+ 
++import android.content.Intent
+ import android.view.View
+ import android.widget.CheckBox
+ import app.grapheneos.setupwizard.R
+@@ -38,6 +39,15 @@ class FinishActivity : SetupWizardActivity(
+         primaryButton.setOnClickListener {
+             val disableOemUnlocking = disableOemUnlockingVisible && disableOemUnlocking.isChecked
++            if (isPrimaryUser) {
++                runCatching {
++                    startActivity(
++                        Intent().setClassName("app.relief.setup", "app.relief.setup.MainActivity")
++                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
++                    )
++                }
++            }
+             FinishActions.finish(this, disableOemUnlocking)
+         }
+     }
+ }
