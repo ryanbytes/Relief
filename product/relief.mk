@@ -4,21 +4,28 @@
 PRODUCT_PACKAGES += \
     ReliefSetup
 
-# Application-layer removals only. Do not remove framework/Mainline/telephony/
-# CellBroadcast/location/WebView/GmsCompat infrastructure here.
+# Application-layer removals only. These module names were verified against the
+# current GrapheneOS Android 17 source/prebuilt definitions.
+#
+# Deliberately keep framework/Mainline/telephony/CellBroadcast/location/WebView/
+# GmsCompat infrastructure. Also keep Seedvault, ThemePicker and WallpaperPicker
+# in the first hardware-test build until setup/settings dependency tests pass.
 PRODUCT_PACKAGES -= \
+    Auditor \
     ExactCalculator \
     LogViewer \
-    PdfViewer \
-    Seedvault \
-    ThemePicker \
-    WallpaperPicker2 \
+    Messaging \
+    PdfViewerGOS \
     Traceur
 
-# Keep DeskClock, Camera, Files/DocumentsUI and Vanadium/WebView for now.
-# DeskClock has no meaningful idle cost and alarms are basic phone functionality.
-# Camera is retained for QR codes and messaging/navigation camera intents.
-# Vanadium may later be split so the browser UI is omitted while WebView remains.
+# Kept intentionally for V1:
+# - DeskClock: alarms/timers are basic phone functionality and negligible at idle.
+# - Camera: QR scanning and camera intents used by messaging/navigation.
+# - DocumentsUI: Android's system file picker; third-party apps depend on it.
+# - AppStore: installs sandboxed Google Play, which is required for Relief RCS.
+# - Vanadium + WebView: WebView is mandatory app infrastructure and the browser
+#   remains for authentication/custom-tab compatibility until tested otherwise.
+# - CellBroadcastReceiver/EmergencyInfo: emergency functionality is non-negotiable.
 
 PRODUCT_PRODUCT_PROPERTIES += \
     ro.relief.enabled=true \
