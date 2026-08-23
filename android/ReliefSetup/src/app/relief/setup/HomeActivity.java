@@ -47,7 +47,6 @@ public final class HomeActivity extends Activity {
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(2);
-        grid.setRowCount(3);
         LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         gp.topMargin = dp(22);
@@ -55,12 +54,25 @@ public final class HomeActivity extends Activity {
 
         addTile(grid, "PHONE", v -> startActivity(new Intent(Intent.ACTION_DIAL)));
         addTile(grid, "MESSAGES", v -> openMessages());
-        addTile(grid, label("MAPS", AppCatalog.MAPS, preferences.getPrimaryMap()),
-                v -> launchPreferred(preferences.getPrimaryMap(), AppCatalog.MAPS, "No navigation app is installed."));
-        addTile(grid, label("MUSIC", AppCatalog.MUSIC, preferences.getPrimaryMusic()),
-                v -> launchPreferred(preferences.getPrimaryMusic(), AppCatalog.MUSIC, "No music app is installed."));
-        addTile(grid, label("WEATHER", AppCatalog.WEATHER, preferences.getPrimaryWeather()),
-                v -> launchPreferred(preferences.getPrimaryWeather(), AppCatalog.WEATHER, "No weather app is installed."));
+
+        String selectedMap = preferences.getPrimaryMap();
+        if (selectedMap != null) {
+            addTile(grid, label("MAPS", AppCatalog.MAPS, selectedMap),
+                    v -> launchSelected(selectedMap, "Selected navigation app is not installed."));
+        }
+
+        String selectedMusic = preferences.getPrimaryMusic();
+        if (selectedMusic != null) {
+            addTile(grid, label("MUSIC", AppCatalog.MUSIC, selectedMusic),
+                    v -> launchSelected(selectedMusic, "Selected music app is not installed."));
+        }
+
+        String selectedWeather = preferences.getPrimaryWeather();
+        if (selectedWeather != null) {
+            addTile(grid, label("WEATHER", AppCatalog.WEATHER, selectedWeather),
+                    v -> launchSelected(selectedWeather, "Selected weather app is not installed."));
+        }
+
         addTile(grid, "APPS", v -> startActivity(new Intent(this, AppsActivity.class)));
 
         Button settings = new Button(this);
@@ -102,19 +114,13 @@ public final class HomeActivity extends Activity {
         }
     }
 
-    private void launchPreferred(String preferred,
-                                 AppCatalog.AppChoice[] candidates,
-                                 String error) {
-        if (preferred != null && AppUtils.launch(this, preferred)) return;
-        for (AppCatalog.AppChoice app : candidates) {
-            if (AppUtils.launch(this, app.packageName)) return;
-        }
+    private void launchSelected(String packageName, String error) {
+        if (AppUtils.launch(this, packageName)) return;
         Toast.makeText(this, error, Toast.LENGTH_LONG).show();
         startActivity(new Intent(this, MainActivity.class));
     }
 
     private String label(String category, AppCatalog.AppChoice[] apps, String packageName) {
-        if (packageName == null) return category;
         for (AppCatalog.AppChoice app : apps) {
             if (packageName.equals(app.packageName)) return category + "\n" + app.name;
         }
