@@ -23,7 +23,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -91,17 +91,34 @@ jobs:
             -no-snapshot \
             -gpu swiftshader_indirect \
             > emulator.log 2>&1 &
+          EMULATOR_PID=$!
 
-          adb wait-for-device
+          sleep 5
+          if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+            echo "Emulator exited before ADB became available." >&2
+            cat emulator.log
+            exit 1
+          fi
+
+          if ! timeout 120 adb wait-for-device; then
+            echo "ADB did not see the emulator within 120 seconds." >&2
+            cat emulator.log
+            exit 1
+          fi
+
           booted=0
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 90); do
             if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
               booted=1
+              break
+            fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
               break
             fi
             sleep 2
           done
           if [[ "$booted" != "1" ]]; then
+            echo "Emulator did not complete Android boot." >&2
             cat emulator.log
             exit 1
           fi
@@ -127,6 +144,7 @@ jobs:
           fi
 
           adb exec-out screencap -p > relief-home.png
+          adb emu kill || true
 
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
